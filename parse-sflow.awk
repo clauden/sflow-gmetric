@@ -1,5 +1,19 @@
 #!/usr/bin/env awk
 
+function gmetric_counter(host, interface, inoctets, outoctets) 
+{
+	device_in = sprintf("port_%d_in_octets", interface)
+	device_out = sprintf("port_%d_out_octets", interface)
+	
+	cmd = sprintf("gmetric -n %s -v %d -t double -S %s:%s", device_in, inoctets, host, host)
+	print cmd
+	system(cmd)
+	cmd = sprintf("gmetric -n %s -v %d -t double -S %s:%s", device_out, outoctets, host, host)
+	print cmd
+	system(cmd)
+}
+
+
 BEGIN {
 	agent = "0.0.0.0"
 	n = 0
@@ -41,6 +55,7 @@ BEGIN {
 /^endSample/ {
 	if (type == "COUNTERSSAMPLE") {
 		printf("interface:%d inOctets:%d\n", ifIndex, inOctets)
+		gmetric_counter(host, ifIndex, inOctets, outOctets)
 	} else if (type == "FLOWSAMPLE") {
 		if (invlan == outvlan)
 			printf("flow self: %d size:%d\n", invlan, pkt)
