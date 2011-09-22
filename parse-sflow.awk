@@ -1,18 +1,31 @@
 #!/usr/bin/env awk
 
+#
+# pass -v debug=1 to enable printing
+# pass -v noop=1 to disable gmetric injection
+#
+
 function gmetric_counter(host, interface, inoctets, outoctets) 
 {
-	device_in = sprintf("port_%d_in_octets", interface)
-	device_out = sprintf("port_%d_out_octets", interface)
+	device_in = sprintf("port_%d_in", interface)
+	device_out = sprintf("port_%d_out", interface)
 	
 	cmd = sprintf("gmetric -n %s -v %d -t double -S %s:%s", device_in, inoctets, host, host)
-	print cmd
-	system(cmd)
+	pdebug(cmd)
+	if (!noop)
+		system(cmd)
 	cmd = sprintf("gmetric -n %s -v %d -t double -S %s:%s", device_out, outoctets, host, host)
-	print cmd
-	system(cmd)
+	pdebug(cmd)
+	if (!noop)
+		system(cmd)
 }
 
+function pdebug(s) 
+{
+	if (debug)
+		print s
+	
+}
 
 BEGIN {
 	agent = "0.0.0.0"
@@ -28,11 +41,11 @@ BEGIN {
 
 /^agent / {
 	host = $2
-	printf("host: %s\n", host)
+	pdebug(sprintf("host: %s\n", host))
 }
 
 /^startDatagram/ {
-	print "----"
+	pdebug("----")
 }
 
 /^startSample/ {
@@ -54,15 +67,16 @@ BEGIN {
 
 /^endSample/ {
 	if (type == "COUNTERSSAMPLE") {
-		printf("interface:%d inOctets:%d\n", ifIndex, inOctets)
+		pdebug(sprintf("interface:%d inOctets:%d\n", ifIndex, inOctets))
+		pdebug(sprintf("interface:%d outOctets:%d\n", ifIndex, outOctets))
 		gmetric_counter(host, ifIndex, inOctets, outOctets)
 	} else if (type == "FLOWSAMPLE") {
 		if (invlan == outvlan)
-			printf("flow self: %d size:%d\n", invlan, pkt)
+			pdebug(sprintf("flow self: %d size:%d\n", invlan, pkt))
 		else
-			printf("flow src:%d dst:%d size:%d\n", src, dst, pkt)
+			pdebug(sprintf("flow src:%d dst:%d size:%d\n", src, dst, pkt))
 	} else {
-		print "??"
+		pdebug("??")
 	}
 }
 	
@@ -89,6 +103,10 @@ BEGIN {
 
 /^ifInOctets/ {
 	inOctets = $2
+}
+
+/^ifOutOctets/ {
+	outOctets = $2
 }
 
 /^sampledPacketSize/ {
