@@ -10,7 +10,7 @@ function gmetric_counter(host, interface, inoctets, outoctets)
 	device_in = sprintf("port_%d_in", interface)
 	device_out = sprintf("port_%d_out", interface)
 	
-	cmd = sprintf("gmetric -n %s -v %d -t double -S %s:%s", device_in, inoctets, host, host)
+	cmd = sprintf("gmetric -u 'bytes/sec' -n %s -v %d -t double -S %s:%s", device_in, inoctets, host, host)
 	pdebug(cmd)
 	if (!noop)
 		system(cmd)
@@ -37,6 +37,10 @@ BEGIN {
 	pkt = 0
 	src = 88888
 	dst = 77777
+
+	# do we need declarations, really?
+	in_ports[""] = 0
+	out_ports[""] = 0
 }
 
 /^agent / {
@@ -48,6 +52,10 @@ BEGIN {
 	pdebug("----")
 }
 
+/^unixSecondsUTC / {
+	ts = $2
+}
+	
 /^startSample/ {
 	n = 0
 	ifIndex = 99999
@@ -67,9 +75,32 @@ BEGIN {
 
 /^endSample/ {
 	if (type == "COUNTERSSAMPLE") {
+		
+		if (!in_ports[ifIndex])
+			in_ports[ifIndex] = sprintf("%d_%d", ts, inOctets)
+
+		# get the last timestamp and count for this interface
+		split(in_ports[ifIndex], x, "_")
+		last_ts = x[1]
+		if (ts < last_ts) {
+			printf("out of order: %d %d %d\n", ifIndex, last_ts, ts)
+		}
+
+		last_cnt = x[2]
+
+		delta_cnt = inOctets - last_cnt
+		delta_ts = ts - last_ts
+		rate = delta_ts > 0 ? delta_cnt / delta_ts : 0
+
+		in_ports[ifIndex] = sprintf("%d_%d", ts, inOctets)
+
+		pdebug(sprintf("interface:%d inOctetsDelta:%d timeDelta:%d rate:%f\n", ifIndex, delta_cnt, delta_ts, rate))
 		pdebug(sprintf("interface:%d inOctets:%d\n", ifIndex, inOctets))
 		pdebug(sprintf("interface:%d outOctets:%d\n", ifIndex, outOctets))
-		gmetric_counter(host, ifIndex, inOctets, outOctets)
+
+		gmetric_counter(host, ifIndex, rate, outOctets)
+		# gmetric_counter(host, ifIndex, inOctets, outOctets)
+
 	} else if (type == "FLOWSAMPLE") {
 		if (invlan == outvlan)
 			pdebug(sprintf("flow self: %d size:%d\n", invlan, pkt))
