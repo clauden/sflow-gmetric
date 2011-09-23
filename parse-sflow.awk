@@ -10,7 +10,7 @@ function gmetric_counter(host, interface, inoctets, outoctets)
 	device_in = sprintf("port_%d_in", interface)
 	device_out = sprintf("port_%d_out", interface)
 	
-	cmd = sprintf("gmetric -u 'bytes/sec' -n %s -v %d -t double -S %s:%s", device_in, inoctets, host, host)
+	cmd = sprintf("gmetric -n %s -v %d -t double -S %s:%s", device_in, inoctets, host, host)
 	pdebug(cmd)
 	if (!noop)
 		system(cmd)
@@ -78,6 +78,8 @@ BEGIN {
 		
 		if (!in_ports[ifIndex])
 			in_ports[ifIndex] = sprintf("%d_%d", ts, inOctets)
+		if (!out_ports[ifIndex])
+			out_ports[ifIndex] = sprintf("%d_%d", ts, outOctets)
 
 		# get the last timestamp and count for this interface
 		split(in_ports[ifIndex], x, "_")
@@ -85,20 +87,34 @@ BEGIN {
 		if (ts < last_ts) {
 			printf("out of order: %d %d %d\n", ifIndex, last_ts, ts)
 		}
-
 		last_cnt = x[2]
 
 		delta_cnt = inOctets - last_cnt
 		delta_ts = ts - last_ts
-		rate = delta_ts > 0 ? delta_cnt / delta_ts : 0
-
+		rate_in = delta_ts > 0 ? delta_cnt / delta_ts : 0
 		in_ports[ifIndex] = sprintf("%d_%d", ts, inOctets)
 
-		pdebug(sprintf("interface:%d inOctetsDelta:%d timeDelta:%d rate:%f\n", ifIndex, delta_cnt, delta_ts, rate))
+		pdebug(sprintf("interface:%d inOctetsDelta:%d timeDelta:%d rate:%f\n", ifIndex, delta_cnt, delta_ts, rate_in))
+
+
+		split(out_ports[ifIndex], x, "_")
+		last_ts = x[1]
+		if (ts < last_ts) {
+			printf("out of order: %d %d %d\n", ifIndex, last_ts, ts)
+		}
+		last_cnt = x[2]
+
+		delta_cnt = outOctets - last_cnt
+		delta_ts = ts - last_ts
+		rate_out = delta_ts > 0 ? delta_cnt / delta_ts : 0
+		out_ports[ifIndex] = sprintf("%d_%d", ts, outOctets)
+
+		pdebug(sprintf("interface:%d outOctetsDelta:%d timeDelta:%d rate:%f\n", ifIndex, delta_cnt, delta_ts, rate_out))
+
 		pdebug(sprintf("interface:%d inOctets:%d\n", ifIndex, inOctets))
 		pdebug(sprintf("interface:%d outOctets:%d\n", ifIndex, outOctets))
 
-		gmetric_counter(host, ifIndex, rate, outOctets)
+		gmetric_counter(host, ifIndex, rate_in, rate_out)
 		# gmetric_counter(host, ifIndex, inOctets, outOctets)
 
 	} else if (type == "FLOWSAMPLE") {
