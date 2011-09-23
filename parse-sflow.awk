@@ -20,6 +20,16 @@ function gmetric_counter(host, interface, inoctets, outoctets)
 		system(cmd)
 }
 
+function gmetric_flow(host, from, to, size)
+{
+	flowname = sprintf("flow_%d_%d", from, to)
+	
+	cmd = sprintf("gmetric -n %s -v %d -t uint32 -S %s:%s", flowname, size, host, host)
+	pdebug(cmd)
+	if (!noop)
+		system(cmd)
+}
+
 function pdebug(s) 
 {
 	if (debug)
@@ -37,6 +47,9 @@ BEGIN {
 	pkt = 0
 	src = 88888
 	dst = 77777
+	inport = 555555
+	outport = 444444
+	pktsize = 0
 
 	# do we need declarations, really?
 	in_ports[""] = 0
@@ -56,6 +69,18 @@ BEGIN {
 	ts = $2
 }
 	
+/^inputPort/ {
+	inport = $2
+}
+
+/^outputPort/ {
+	outport = $2
+}
+
+/^sampledPacketSize/ {
+	pktsize = $2
+}
+
 /^startSample/ {
 	n = 0
 	ifIndex = 99999
@@ -118,10 +143,12 @@ BEGIN {
 		# gmetric_counter(host, ifIndex, inOctets, outOctets)
 
 	} else if (type == "FLOWSAMPLE") {
-		if (invlan == outvlan)
+		if (invlan == outvlan) {
 			pdebug(sprintf("flow self: %d size:%d\n", invlan, pkt))
-		else
+		} else {
 			pdebug(sprintf("flow src:%d dst:%d size:%d\n", src, dst, pkt))
+		}
+		gmetric_flow(host, inport, outport, pktsize)
 	} else {
 		pdebug("??")
 	}
